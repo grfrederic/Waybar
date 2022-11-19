@@ -99,6 +99,12 @@ void waybar::modules::Battery::refreshBatteries() {
       }
       auto dir_name = node.path().filename();
       auto bat_defined = config_["bat"].isString();
+
+      // when autodetecting use only batteries named BAT* or CMB*
+      if (not (bat_defined || dir_name.string().rfind("BAT", 0) == 0 || dir_name.string().rfind("CMB", 0) == 0)) {
+        continue;
+      }
+
       if (((bat_defined && dir_name == config_["bat"].asString()) || !bat_defined) &&
           (fs::exists(node.path() / "capacity") || fs::exists(node.path() / "charge_now")) &&
           fs::exists(node.path() / "uevent") && fs::exists(node.path() / "status") &&
