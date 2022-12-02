@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include <iostream>
+#include <regex>
 waybar::modules::Battery::Battery(const std::string& id, const Json::Value& config)
     : ALabel(config, "battery", id, "{capacity}%", 60) {
 #if defined(__linux__)
@@ -98,15 +99,29 @@ void waybar::modules::Battery::refreshBatteries() {
         continue;
       }
       auto dir_name = node.path().filename();
-      auto bat_defined = config_["bat"].isString();
+      bool needs_match = config_["bat"].isString() || config_["bat"].isArray();
+      bool has_match = false;
 
-      // when autodetecting use only batteries named BAT* or CMB*
-      if (not (bat_defined || dir_name.string().rfind("BAT", 0) == 0 || dir_name.string().rfind("CMB", 0) == 0)) {
+      if (config_["bat"].isArray()) {
+        for (auto bat_regex : config_["bat"]) {
+          std::regex e (bat_regex.asString());
+          if (std::regex_match(dir_name.string(), e)) {
+            has_match = true;
+            break;
+          }
+        }
+      }
+
+      if (config_["bat"].isString() && dir_name != config_["bat"].asString()) {
+        std::regex e (config_["bat"].asString());
+        has_match = std::regex_match(dir_name.string(), e);
+      }
+
+      if (needs_match && not has_match) {
         continue;
       }
 
-      if (((bat_defined && dir_name == config_["bat"].asString()) || !bat_defined) &&
-          (fs::exists(node.path() / "capacity") || fs::exists(node.path() / "charge_now")) &&
+      if ((fs::exists(node.path() / "capacity") || fs::exists(node.path() / "charge_now")) &&
           fs::exists(node.path() / "uevent") && fs::exists(node.path() / "status") &&
           fs::exists(node.path() / "type")) {
         std::string type;
@@ -138,6 +153,8 @@ void waybar::modules::Battery::refreshBatteries() {
   if (warnFirstTime_ && batteries_.empty()) {
     if (config_["bat"].isString()) {
       spdlog::warn("No battery named {0}", config_["bat"].asString());
+    } else if (config_["bat"].isArray()) {
+      spdlog::warn("No matching battery found.");
     } else {
       spdlog::warn("No batteries.");
     }
